@@ -5,7 +5,10 @@
 #include <thread>
 #include <chrono>
 
-int main(int arc, char* argv[]){
+
+int main(int argc, char* argv[]){
+    std::string name = "Kath";
+    if(argc > 1) name = argv[1];
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(socket_fd == -1){
         std::cerr << "Socket error\n";
@@ -24,7 +27,7 @@ int main(int arc, char* argv[]){
     int count = 0;
     while(count++ < 4){
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        std::string message = std::format("Hello server from {}\n", argv[1]);
+        std::string message = std::format("Hello server from {}\n", name);
         auto sz = send(socket_fd, message.data(), message.size(), 0);
         if(sz == -1){
             std::cerr << "Sent error\n";

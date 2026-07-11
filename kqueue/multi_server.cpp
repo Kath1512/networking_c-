@@ -137,6 +137,7 @@ int main(){
                 auto got = recv(client_fd, buffer, sizeof(buffer), 0);
                 if(got == 0){
                     std::cout << std::format("Connection fd {} closed\n", client_fd);
+                    cnt[client_fd] = 0;
                     close(client_fd);
                     continue;
                 }
