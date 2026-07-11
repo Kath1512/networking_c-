@@ -23,7 +23,7 @@ int main(int arc, char* argv[]){
     }
     int count = 0;
     while(count++ < 4){
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         std::string message = std::format("Hello server from {}\n", argv[1]);
         auto sz = send(socket_fd, message.data(), message.size(), 0);
         if(sz == -1){

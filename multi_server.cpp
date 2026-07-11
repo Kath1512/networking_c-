@@ -4,6 +4,10 @@
 #include<cstring>
 #include<thread>
 #include<poll.h>
+#include<sys/event.h>
+#include<sys/types.h>
+#include<sys/time.h>
+#include<vector>
 
 void print_detail(const sockaddr_in& client_address){
     std::cout << "Client connected\n";
@@ -61,44 +65,92 @@ int main(){
     std::cout << "Listening on port 8080\n";
 
     
-    std::vector<pollfd> fds;
-    fds.push_back({socket_fd, POLLIN});
+    int kq = kqueue();
+    struct kevent change; //this should be registered to listening socket
+
+    EV_SET( //fill kevent's fields
+        &change,
+        socket_fd,
+        EVFILT_READ,
+        EV_ADD,
+        0,
+        0,
+        nullptr
+    );
+
+    //register
+    kevent(
+        kq,
+        &change,
+        1,
+        nullptr,
+        0,
+        nullptr
+    );
+
+    struct kevent events[64];
+    std::vector<int> cnt(64);
 
     while(true){
-        poll(fds.data(), fds.size(), -1);
-        for(auto& p : fds){
-            if(p.revents & POLLIN){
-                if(p.fd == socket_fd){
-                    int client_fd;
-                    sockaddr_in client_address{};
-                    if(!get_client(socket_fd, client_fd, client_address)) return 1;
-                    print_detail(client_address);
-                    fds.push_back({client_fd, POLLIN});
-                    std::cout << std::format("Waiting for message from client {}.....\n", client_fd);
-                }
-                else{
-                    char buffer[256];
-                    auto got = recv(p.fd, buffer, sizeof(buffer), 0);
-                    if(got == 0){
-                        std::cout << std::format("Connection fd {} closed\n", p.fd);
-                        close(p.fd);
-                        continue;
-                    }
-                    if(got == -1){
-                        std::cerr << "Receive error: " << strerror(errno) << "\n";
-                        return 1;
-                    }
+        int nev = kevent(
+            kq,
+            nullptr,
+            0,
+            events,
+            64,
+            nullptr
+        );
+        
+        //handle each 
+        for(int i = 0; i < nev; i++){
+            //if ident is listening socket -> register new event;
+            if(events[i].ident == socket_fd){
+                int client_fd;
+                sockaddr_in client_address{};
 
-                    std::cout << std::format("Response from client {}: ", p.fd) << std::string(buffer, got) << "\n";
-                    char response[] = "Got message!";
-                    send(p.fd, response, sizeof(response), 0);
+                if(!get_client(socket_fd, client_fd, client_address)) return 1;
+                print_detail(client_address);
+
+                struct kevent ev;
+                EV_SET(
+                    &ev,
+                    client_fd,
+                    EVFILT_READ,
+                    EV_ADD,
+                    0,
+                    0,
+                    nullptr
+                );
+                kevent(
+                    kq,
+                    &ev,
+                    1,
+                    nullptr,
+                    0,
+                    nullptr
+                );
+                std::cout << std::format("Waiting for message from client {}.....\n", client_fd);
+            }
+            else{
+                int client_fd = events[i].ident;
+                char buffer[256];
+                auto got = recv(client_fd, buffer, sizeof(buffer), 0);
+                if(got == 0){
+                    std::cout << std::format("Connection fd {} closed\n", client_fd);
+                    close(client_fd);
+                    continue;
                 }
+                if(got == -1){
+                    std::cerr << "Receive error: " << strerror(errno) << "\n";
+                    return 1;
+                }
+
+                std::cout << std::format("Response from client {}: ", client_fd) << std::string(buffer, got) << "\n";
+                std::string response = "Got message! Count: " + std::to_string(++cnt[client_fd]);
+                send(client_fd, response.data(), response.size(), 0);
             }
         }
-
     }
-
-    close(socket_fd);
 
 
 }
